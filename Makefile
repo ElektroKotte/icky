@@ -6,6 +6,8 @@ CFLAGS_debug += -O0 -g
 CFLAGS += -Wall -Wextra
 CFLAGS += $(CFLAGS_$(MODE))
 
+LDFLAGS += 
+
 PREFIX ?= usr
 
 all: release
