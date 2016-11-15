@@ -24,4 +24,7 @@ install:
 format:
 	clang-format *.c *.h
 
+analysis: clean
+	scan-build --status-bugs -enable-checker alpha,nullability,security,unix $(MAKE)
+
 icky: icky.o
