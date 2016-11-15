@@ -5,11 +5,11 @@
 
 #include <curl/curl.h>
 
-#define DEFAULT_CFG_DIR "~/.icky"
-#define DEFAULT_SERVER "localhost:7777/sticky"
+#define DEFAULT_CFG_DIR "."
+#define DEFAULT_SERVER "https://kottland.net:3000/sticky"
 #define DEFAULT_CFG_FILE DEFAULT_CFG_DIR "/config"
 #define DEFAULT_CA_FILE DEFAULT_CFG_DIR "/ca.crt"
-#define DEFAULT_CLIENT_FILE DEFAULT_CFG_DIR "/client.crt"
+#define DEFAULT_CLIENT_FILE DEFAULT_CFG_DIR "/client.pem"
 
 #define log(fmt, ...) printf("[%s:%d] " fmt "\n",__func__, __LINE__, ## __VA_ARGS__)
 #define err(fmt, ...) fprintf(stderr, fmt "\n", ## __VA_ARGS__)
@@ -40,7 +40,7 @@ static void post(const cfg_t *cfg)
 
     curl_easy_setopt(curl, CURLOPT_URL, cfg->server);
     curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_callback);
-    curl_easy_setopt(curl, CURLOPT_PUT, 1l);
+    curl_easy_setopt(curl, CURLOPT_POST, 1l);
 
     log("Performing stuff");
     res = curl_easy_perform(curl);
@@ -54,20 +54,23 @@ cleanup:
 
 static void get(const cfg_t *cfg)
 {
-    int res;
+    int res = CURLE_FAILED_INIT;
     CURL *curl;
 
     curl = curl_easy_init();
-    if (!curl) goto cleanup;
-
-    curl_easy_setopt(curl, CURLOPT_URL, cfg->server);
-    
-    res = curl_easy_perform(curl);
-    if (res != CURLE_OK) {
-        err("curl perform failed: %s", curl_easy_strerror(res));
+    if (!curl) {
+	    goto cleanup;
     }
 
+    if ((res = curl_easy_setopt(curl, CURLOPT_URL, cfg->server)) != CURLE_OK) goto cleanup;
+    if ((res = curl_easy_setopt(curl, CURLOPT_SSLCERT, cfg->client_file)) != CURLE_OK) goto cleanup;
+    if ((res = curl_easy_setopt(curl, CURLOPT_SSLCERTTYPE, "PEM")) != CURLE_OK) goto cleanup;
+    if ((res = curl_easy_setopt(curl, CURLOPT_CAINFO, cfg->ca_file)) != CURLE_OK) goto cleanup;
+    
+    res = curl_easy_perform(curl);
+
 cleanup:
+    if (res != CURLE_OK) err("Curl error: %s", curl_easy_strerror(res));
     curl_easy_cleanup(curl);
 }
 
