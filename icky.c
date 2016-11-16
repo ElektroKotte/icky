@@ -139,6 +139,9 @@ static void cfg_setup(const char *config_file, cfg_t *cfg)
     wordexp_t exp_res;
     lua_State *state;
 
+    char *client_cert = NULL;
+    char *ca_cert = NULL;
+
     cfg->verbose = DEFAULT_VERBOSE;
     cfg->client_file = NULL;
     cfg->server = NULL;
@@ -171,24 +174,39 @@ static void cfg_setup(const char *config_file, cfg_t *cfg)
         cfg->verbose = lua_toboolean(state, -4) ? 1l : 0l;
     }
     if (lua_isstring(state, -3)) {
-        cfg->client_file = strdup(lua_tostring(state, -3));
+        client_cert = strdup(lua_tostring(state, -3));
     }
     if (lua_isstring(state, -2)) {
-        cfg->ca_file = strdup(lua_tostring(state, -2));
+        ca_cert = strdup(lua_tostring(state, -2));
     }
     if (lua_isstring(state, -1)) {
         cfg->server = strdup(lua_tostring(state, -1));
     }
 
     lua_close(state);
-    wordfree(&exp_res);
 
 cfg_set:
-    log("Setting rest of the values");
-    // TODO do word expansion on paths here
-    if (!cfg->client_file) cfg->client_file = strdup(DEFAULT_CLIENT_FILE);
-    if (!cfg->ca_file) cfg->ca_file = strdup(DEFAULT_CA_FILE);
+    if (!client_cert) client_cert = strdup(DEFAULT_CLIENT_FILE);
+    if (!wordexp(client_cert, &exp_res, WRDE_NOCMD | WRDE_REUSE)) {
+        cfg->client_file = strdup(exp_res.we_wordv[0]);
+    } else {
+        err("Unable to expand client file");
+        cfg->client_file = strdup(DEFAULT_CLIENT_FILE);
+    }
+
+    if (!ca_cert) ca_cert = strdup(DEFAULT_CA_FILE);
+    if (!wordexp(ca_cert, &exp_res, WRDE_NOCMD | WRDE_REUSE)) {
+        cfg->ca_file = strdup(exp_res.we_wordv[0]);
+    } else {
+        err("Unable to expand ca file");
+        cfg->client_file = strdup(DEFAULT_CA_FILE);
+    }
+
     if (!cfg->server) cfg->server = strdup(DEFAULT_SERVER);
+
+    wordfree(&exp_res);
+    free(ca_cert);
+    free(client_cert);
 
     log("client file: %s", cfg->client_file);
     log("ca file: %s", cfg->ca_file);
