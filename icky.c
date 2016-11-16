@@ -3,22 +3,27 @@
 #include <getopt.h>
 #include <stdbool.h>
 #include <string.h>
+#include <wordexp.h>
+
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
 
 #include <curl/curl.h>
 
-#define DEFAULT_CFG_DIR "."
-#define DEFAULT_SERVER "https://kottland.net:3000/sticky"
-#define DEFAULT_CFG_FILE DEFAULT_CFG_DIR "/config"
+#define DEFAULT_CFG_DIR "~/.icky"
+#define DEFAULT_SERVER "https://localhost:7010/sticky"
+#define DEFAULT_CFG_FILE DEFAULT_CFG_DIR "/config.lua"
 #define DEFAULT_CA_FILE DEFAULT_CFG_DIR "/ca.crt"
 #define DEFAULT_CLIENT_FILE DEFAULT_CFG_DIR "/client.pem"
 
-#define DEFAULT_VERBOSE 1l
+#define DEFAULT_VERBOSE 0l
 
 #define CHUNK 4096
 #define CAPACITY_MAX (100 * 1024 * 1024)
 #define CAPACITY_INC (CHUNK * 10)
 
-#define log(fmt, ...) printf("[%s:%d] " fmt "\n",__func__, __LINE__, ## __VA_ARGS__)
+#define log(fmt, ...) if (m_verbose) printf("[%s:%d] " fmt "\n",__func__, __LINE__, ## __VA_ARGS__)
 #define err(fmt, ...) fprintf(stderr, fmt "\n", ## __VA_ARGS__)
 
 typedef struct {
@@ -27,6 +32,8 @@ typedef struct {
     char *server;
     long verbose;
 } cfg_t;
+
+static bool m_verbose = false;
 
 static bool read_input(char **buffer, size_t *buffer_size)
 {
@@ -86,11 +93,12 @@ static void post(const cfg_t *cfg)
     if ((res = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers)) != CURLE_OK) goto cleanup;
 
     res = curl_easy_perform(curl);
-    if (res != CURLE_OK) {
-        err("curl perform failed: %s", curl_easy_strerror(res));
-    }
 
 cleanup:
+    if (res != CURLE_OK) {
+        err("There was a curl error: %s", curl_easy_strerror(res));
+    }
+
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
     free(buffer);
@@ -119,20 +127,90 @@ cleanup:
     curl_easy_cleanup(curl);
 }
 
-static void cfg_setup(cfg_t *cfg)
+static void cfg_free(cfg_t *cfg)
 {
-    cfg->client_file = DEFAULT_CLIENT_FILE;
-    cfg->ca_file = DEFAULT_CA_FILE;
-    cfg->server = DEFAULT_SERVER;
+    free(cfg->client_file);
+    free(cfg->ca_file);
+    free(cfg->server);
+}
+
+static void cfg_setup(const char *config_file, cfg_t *cfg)
+{
+    wordexp_t exp_res;
+    lua_State *state;
+
     cfg->verbose = DEFAULT_VERBOSE;
+    cfg->client_file = NULL;
+    cfg->server = NULL;
+    cfg->ca_file = NULL;
+
+    if (!config_file || !cfg) {
+        log("Invalid parameters for getting configuration");
+        goto cfg_set;
+    }
+
+    state = luaL_newstate();
+
+    luaopen_base(state);
+    luaopen_io(state);
+    luaopen_string(state);
+    luaopen_math(state);
+
+    wordexp(config_file, &exp_res, WRDE_NOCMD);
+    if (luaL_loadfile(state, exp_res.we_wordv[0]) || lua_pcall(state, 0, 0, 0)) {
+        log("Unable to run configuration file: %s", lua_tostring(state, -1));
+        goto cfg_set;
+    }
+
+    lua_getglobal(state, "curl_verbose");
+    lua_getglobal(state, "client_cert");
+    lua_getglobal(state, "ca_cert");
+    lua_getglobal(state, "server");
+
+    if (lua_isboolean(state, -4)) {
+        cfg->verbose = lua_toboolean(state, -4) ? 1l : 0l;
+    }
+    if (lua_isstring(state, -3)) {
+        cfg->client_file = strdup(lua_tostring(state, -3));
+    }
+    if (lua_isstring(state, -2)) {
+        cfg->ca_file = strdup(lua_tostring(state, -2));
+    }
+    if (lua_isstring(state, -1)) {
+        cfg->server = strdup(lua_tostring(state, -1));
+    }
+
+    lua_close(state);
+    wordfree(&exp_res);
+
+cfg_set:
+    log("Setting rest of the values");
+    if (!cfg->client_file) cfg->client_file = strdup(DEFAULT_CLIENT_FILE);
+    if (!cfg->ca_file) cfg->ca_file = strdup(DEFAULT_CA_FILE);
+    if (!cfg->server) cfg->server = strdup(DEFAULT_SERVER);
+
+    log("client file: %s", cfg->client_file);
+    log("ca file: %s", cfg->ca_file);
+    log("server: %s", cfg->server);
+    log("curl verbose: %ld", cfg->verbose);
 }
 
 static void usage(int ec)
 {
     fprintf(stderr,
             "Usage: icky [options]\n"
-            "   -h          Display this help\n"
-            "   -i          Read input and push to clipboard\n");
+            "Configure icky by setting the following fields in the configuration file\n"
+            "-- icky lua configuration file --\n"
+            "-- curl_verbose = false\n"
+            "-- client_cert = '" DEFAULT_CLIENT_FILE "'\n"
+            "-- ca_cert = '" DEFAULT_CA_FILE "'\n"
+            "-- server = '" DEFAULT_SERVER "'\n"
+            "\n"
+            "The following options control ickys behavior\n"
+            "   -c <cfg file>   Config file to use\n"
+            "   -h              Display this help\n"
+            "   -v              Be verbose\n"
+            "   -i              Read input and push to clipboard\n");
     exit(ec);
 }
 
@@ -141,9 +219,14 @@ int main(int argc, char *argv[])
     bool input = false;
     int opt;
     cfg_t cfg;
+    char *config_file = NULL;
 
-    while ((opt = getopt(argc, argv, "hio:")) != -1) {
+    while ((opt = getopt(argc, argv, "vhic:")) != -1) {
         switch (opt) {
+            case 'v':
+                m_verbose = true;
+                break;
+
             case 'h':
                 usage(EXIT_SUCCESS);
                 break;
@@ -152,13 +235,18 @@ int main(int argc, char *argv[])
                 input = true;
                 break;
 
+            case 'c':
+                config_file = strdup(optarg);
+                break;
+
             default:
                 log("here: %d", opt);
                 usage(EXIT_FAILURE);
         }
     }
 
-    cfg_setup(&cfg);
+    if (!config_file) config_file = strdup(DEFAULT_CFG_FILE);
+    cfg_setup(config_file, &cfg);
 
     if (input) {
         post(&cfg);
@@ -167,6 +255,8 @@ int main(int argc, char *argv[])
     }
 
     curl_global_cleanup();
+    free(config_file);
+    cfg_free(&cfg);
 
     return EXIT_SUCCESS;
 }

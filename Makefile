@@ -6,7 +6,7 @@ CFLAGS_debug += -O0 -g
 CFLAGS += -Wall -Wextra
 CFLAGS += $(CFLAGS_$(MODE))
 
-LDFLAGS += -lcurl
+LDFLAGS += -lcurl -llua
 
 PREFIX ?= usr
 
