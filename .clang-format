@@ -2,8 +2,8 @@ Language:        Cpp
 AccessModifierOffset: -2
 
 AlignAfterOpenBracket: true
-AlignConsecutiveAssignments: true
-AlignConsecutiveDeclarations: true
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
 AlignEscapedNewlinesLeft: true
 AlignOperands:   true
 AlignTrailingComments: true

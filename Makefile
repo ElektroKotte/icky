@@ -22,7 +22,7 @@ install:
 	install -Dt $(DESTDIR)/$(PREFIX)/bin icky
 
 format:
-	clang-format *.c *.h
+	clang-format -i *.c
 
 analysis: clean
 	scan-build --status-bugs -enable-checker alpha,nullability,security,unix $(MAKE)

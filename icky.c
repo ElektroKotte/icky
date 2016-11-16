@@ -1,12 +1,12 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <getopt.h>
 #include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <wordexp.h>
 
-#include <lua.h>
 #include <lauxlib.h>
+#include <lua.h>
 #include <lualib.h>
 
 #include <curl/curl.h>
@@ -23,8 +23,9 @@
 #define CAPACITY_MAX (100 * 1024 * 1024)
 #define CAPACITY_INC (CHUNK * 10)
 
-#define log(fmt, ...) if (m_verbose) printf("[%s:%d] " fmt "\n",__func__, __LINE__, ## __VA_ARGS__)
-#define err(fmt, ...) fprintf(stderr, fmt "\n", ## __VA_ARGS__)
+#define log(fmt, ...) \
+    if (m_verbose) printf("[%s:%d] " fmt "\n", __func__, __LINE__, ##__VA_ARGS__)
+#define err(fmt, ...) fprintf(stderr, fmt "\n", ##__VA_ARGS__)
 
 typedef struct {
     char *ca_file;
@@ -52,7 +53,8 @@ static bool read_input(char **buffer, size_t *buffer_size)
             void *newptr = realloc(*buffer, capacity);
             if (newptr) {
                 *buffer = newptr;
-            } else goto fail;
+            } else
+                goto fail;
         }
         memcpy(*buffer + *buffer_size, chunk, nbytes);
         *buffer_size += nbytes;
@@ -89,7 +91,8 @@ static void post(const cfg_t *cfg)
     if ((res = curl_easy_setopt(curl, CURLOPT_CAINFO, cfg->ca_file)) != CURLE_OK) goto cleanup;
     if ((res = curl_easy_setopt(curl, CURLOPT_POST, 1l)) != CURLE_OK) goto cleanup;
     if ((res = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, buffer)) != CURLE_OK) goto cleanup;
-    if ((res = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, buffer_size)) != CURLE_OK) goto cleanup;
+    if ((res = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, buffer_size)) != CURLE_OK)
+        goto cleanup;
     if ((res = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers)) != CURLE_OK) goto cleanup;
 
     res = curl_easy_perform(curl);
@@ -111,7 +114,7 @@ static void get(const cfg_t *cfg)
 
     curl = curl_easy_init();
     if (!curl) {
-	    goto cleanup;
+        goto cleanup;
     }
 
     if ((res = curl_easy_setopt(curl, CURLOPT_VERBOSE, cfg->verbose)) != CURLE_OK) goto cleanup;
@@ -216,6 +219,7 @@ cfg_set:
 
 static void usage(int ec)
 {
+    // clang-format off
     fprintf(stderr,
             "Usage: icky [options]\n"
             "Configure icky by setting the following fields in the configuration file\n"
@@ -230,6 +234,7 @@ static void usage(int ec)
             "   -h              Display this help\n"
             "   -v              Be verbose\n"
             "   -i              Read input and push to clipboard\n");
+    // clang-format on
     exit(ec);
 }
 
