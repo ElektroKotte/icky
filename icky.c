@@ -185,6 +185,7 @@ static void cfg_setup(const char *config_file, cfg_t *cfg)
 
 cfg_set:
     log("Setting rest of the values");
+    // TODO do word expansion on paths here
     if (!cfg->client_file) cfg->client_file = strdup(DEFAULT_CLIENT_FILE);
     if (!cfg->ca_file) cfg->ca_file = strdup(DEFAULT_CA_FILE);
     if (!cfg->server) cfg->server = strdup(DEFAULT_SERVER);
