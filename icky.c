@@ -82,7 +82,8 @@ static void post(const cfg_t *cfg)
     curl = curl_easy_init();
     if (!curl) goto cleanup;
 
-    headers = curl_slist_append(headers, "Content-Type: text/plain");
+    headers = curl_slist_append(headers, "Content-Type: application/octet-stream");
+    headers = curl_slist_append(headers, "Expect: ");
 
     if ((res = curl_easy_setopt(curl, CURLOPT_VERBOSE, cfg->verbose)) != CURLE_OK) goto cleanup;
     if ((res = curl_easy_setopt(curl, CURLOPT_URL, cfg->server)) != CURLE_OK) goto cleanup;
